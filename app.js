@@ -222,7 +222,26 @@ const elements = {
   sampleRecordsBody: $("sampleRecordsBody"),
   sampleEmptyState: $("sampleEmptyState"),
   clearSamplesButton: $("clearSamplesButton"),
-  globalVoiceButton: $("globalVoiceButton"),
+  voiceFab: $("voiceFab"),
+  voiceOverlay: $("voiceOverlay"),
+  voiceStartBtn: $("voiceStartBtn"),
+  voiceStopBtn: $("voiceStopBtn"),
+  voiceConfirmBtn: $("voiceConfirmBtn"),
+  voiceRetryBtn: $("voiceRetryBtn"),
+  voiceRetryBtn2: $("voiceRetryBtn2"),
+  voiceCancelBtn: $("voiceCancelBtn"),
+  voiceCancelBtn2: $("voiceCancelBtn2"),
+  voiceStateIdle: $("voiceStateIdle"),
+  voiceStateListening: $("voiceStateListening"),
+  voiceStateProcessing: $("voiceStateProcessing"),
+  voiceStateResult: $("voiceStateResult"),
+  voiceStateError: $("voiceStateError"),
+  voiceInterimText: $("voiceInterimText"),
+  voiceRawText: $("voiceRawText"),
+  voiceResultTitle: $("voiceResultTitle"),
+  voiceResultFields: $("voiceResultFields"),
+  voiceErrorTitle: $("voiceErrorTitle"),
+  voiceErrorDetail: $("voiceErrorDetail"),
   aiProvider: $("aiProvider"),
   aiCustomUrl: $("aiCustomUrl"),
   aiCustomUrlLabel: $("aiCustomUrlLabel"),
@@ -232,7 +251,9 @@ const elements = {
   aiAnalyzeVendorsButton: $("aiAnalyzeVendorsButton"),
   aiAnalyzeItemsButton: $("aiAnalyzeItemsButton"),
   aiOutput: $("aiOutput"),
-  aiStatus: $("aiStatus")
+  aiStatus: $("aiStatus"),
+  aiChatInput: $("aiChatInput"),
+  aiChatSendBtn: $("aiChatSendBtn")
 };
 
 function loadState() {
@@ -1674,113 +1695,259 @@ function renderCloudStatus() {
    Voice Input — Web Speech API
    ================================================================ */
 
+/* ================================================================
+   Voice Input v2 — 自然语言 → AI 解析 → 自动填单
+   Flow: 浮动按钮 → 弹窗 → STT → DeepSeek NLP → 自动填表
+   ================================================================ */
+
 let voiceRecognition = null;
-let voiceActiveField = null;
-let voiceFailCount = 0;
+let voiceParsedAction = null;
 
 function initVoiceRecognition() {
-  console.log("[Voice] Initializing speech recognition...");
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn("[Voice] SpeechRecognition not available in this browser");
-    if (elements.globalVoiceButton) {
-      elements.globalVoiceButton.style.opacity = "0.45";
-      elements.globalVoiceButton.title = "语音不可用：请使用 Chrome 或 Edge 浏览器";
-      elements.globalVoiceButton.textContent = "🎤 浏览器不支持";
-    }
-    return;
-  }
-  voiceRecognition = new SpeechRecognition();
-  voiceRecognition.lang = "zh-CN";
-  voiceRecognition.interimResults = false;
-  voiceRecognition.continuous = false;
-  voiceRecognition.maxAlternatives = 1;
+  if (SpeechRecognition) {
+    voiceRecognition = new SpeechRecognition();
+    voiceRecognition.lang = "zh-CN";
+    voiceRecognition.interimResults = true;
+    voiceRecognition.continuous = true;
+    voiceRecognition.maxAlternatives = 1;
 
-  voiceRecognition.onresult = (event) => {
-    console.log("[Voice] Result received:", event.results[0][0].transcript);
-    voiceFailCount = 0;
-    const text = event.results[0][0].transcript.trim();
-    if (voiceActiveField && document.activeElement === voiceActiveField) {
-      voiceActiveField.value = text;
-      voiceActiveField.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    stopVoiceListening();
-  };
-
-  voiceRecognition.onerror = (event) => {
-    console.error("[Voice] Error:", event.error, event.message);
-    stopVoiceListening();
-    voiceFailCount += 1;
-    if (event.error === "not-allowed") {
-      alert("🎤 麦克风权限被拒绝。\n\n请在浏览器地址栏左侧点击锁图标 → 将麦克风设为\"允许\"。");
-    } else if (event.error === "network") {
-      if (voiceFailCount === 1) {
-        alert("🎤 Chrome 语音识别依赖 Google 服务器，在国内可能被屏蔽。\n\n建议：用 Microsoft Edge 浏览器打开（Edge 用 Azure 服务器，国内可用）。");
-      } else {
-        alert("语音识别仍然无法连接，请换用 Edge 浏览器试试。");
+    voiceRecognition.onresult = (event) => {
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) { final += t; } else { interim += t; }
       }
-    } else if (event.error === "no-speech") {
-      alert("🎤 未检测到语音。\n\n请确认麦克风已开启，并靠近麦克风说话。");
-    } else if (event.error === "aborted") {
-      // User aborted — no message needed
-    } else {
-      alert("语音识别出错：" + event.error);
-    }
-  };
+      const display = final + interim;
+      if (display && elements.voiceInterimText) {
+        elements.voiceInterimText.textContent = display;
+      }
+      if (final) {
+        onVoiceFinal(final);
+      }
+    };
 
-  voiceRecognition.onend = () => {
-    console.log("[Voice] Recognition ended");
-    stopVoiceListening();
-  };
+    voiceRecognition.onerror = (event) => {
+      if (event.error === "not-allowed") {
+        showVoiceError("麦克风权限被拒绝", "请在浏览器地址栏左侧点击锁图标 → 允许麦克风。");
+      } else if (event.error === "network") {
+        showVoiceError("语音识别无法连接",
+          "Chrome 依赖 Google 服务器（国内不通），请用 <strong>Microsoft Edge</strong> 浏览器打开。<br>Edge 用微软 Azure 服务器，国内可以正常使用。");
+      } else if (event.error === "no-speech") {
+        showVoiceError("没听清", "请再试一次，靠近麦克风说话。");
+      } else if (event.error !== "aborted") {
+        showVoiceError("语音出错", event.error);
+      }
+    };
 
-  console.log("[Voice] SpeechRecognition initialized successfully");
+    voiceRecognition.onend = () => {
+      if (elements.voiceOverlay?.classList.contains("is-open")) {
+        showVoiceIdle();
+      }
+    };
+  }
 }
 
-function startVoiceListening() {
-  console.log("[Voice] Button clicked");
-
+function openVoiceModal() {
   if (!voiceRecognition) {
-    console.warn("[Voice] voiceRecognition is null");
-    alert("🎤 当前浏览器不支持语音识别。\n\n请使用 Chrome 或 Edge 浏览器打开本页面。");
+    alert("🎤 当前浏览器不支持语音识别。\n\n请用 Microsoft Edge 浏览器打开本页面。");
     return;
   }
-
   if (window.location.protocol === "file:") {
-    alert("🎤 语音识别在 file:// 协议下不可用。\n\n请通过网址访问（GitHub Pages 或 localhost）。");
+    alert("语音识别需要安全环境。\n\n请通过网址访问（GitHub Pages 或 localhost）。");
     return;
   }
+  showVoiceIdle();
+  elements.voiceOverlay.classList.add("is-open");
+}
 
-  const active = document.activeElement;
-  console.log("[Voice] Active element:", active?.tagName, active?.type, active?.matches("input:not([type=hidden]), textarea"));
-  if (!active || !active.matches("input:not([type=hidden]), textarea")) {
-    alert("🎤 请先点击要填入文字的输入框，再点语音按钮。");
-    return;
-  }
+function closeVoiceModal() {
+  try { voiceRecognition?.abort(); } catch (e) { /* ignore */ }
+  elements.voiceOverlay.classList.remove("is-open");
+  voiceParsedAction = null;
+}
 
-  voiceActiveField = active;
-  elements.globalVoiceButton.classList.add("is-listening");
-  elements.globalVoiceButton.textContent = "🔴 正在听...";
-  console.log("[Voice] Starting recognition...");
+function showVoiceIdle() {
+  setVoiceState("idle");
+}
 
+function showVoiceState(id) {
+  ["Idle", "Listening", "Processing", "Result", "Error"].forEach((s) => {
+    const el = elements["voiceState" + s];
+    if (el) el.style.display = s === id ? "" : "none";
+  });
+}
+
+function startVoiceRecording() {
+  setVoiceState("Listening");
+  elements.voiceInterimText.textContent = "请说话...";
   try {
     voiceRecognition.start();
-    console.log("[Voice] recognition.start() succeeded");
   } catch (err) {
-    console.error("[Voice] start() threw:", err);
-    stopVoiceListening();
-    alert("🎤 语音启动失败：" + err.message + "\n\n请换用 Microsoft Edge 浏览器试试。");
+    showVoiceError("启动失败", err.message + "<br><br>请用 Edge 浏览器打开。");
   }
 }
 
-function stopVoiceListening() {
-  console.log("[Voice] Stopping");
-  voiceActiveField = null;
-  if (elements.globalVoiceButton) {
-    elements.globalVoiceButton.classList.remove("is-listening");
-    elements.globalVoiceButton.textContent = "🎤 语音录入";
-  }
-  try { voiceRecognition?.abort(); } catch (e) { /* ignore */ }
+function stopVoiceRecording() {
+  try { voiceRecognition?.stop(); } catch (e) { /* ignore */ }
 }
+
+function onVoiceFinal(text) {
+  stopVoiceRecording();
+  elements.voiceRawText.textContent = "你说的是：" + text;
+  setVoiceState("Processing");
+  parseVoiceText(text);
+}
+
+async function parseVoiceText(text) {
+  const aiConfig = state.meta.aiConfig || {};
+  const apiKey = elements.aiApiKey?.value?.trim();
+
+  if (!apiKey || !aiConfig.url) {
+    // No AI configured — show raw text and let user manually act
+    showVoiceError("未配置 AI", "请先在 <strong>AI 分析</strong> 页面配置 API Key，才能自动解析语音指令。<br><br>你说的是：<br>" + text);
+    return;
+  }
+
+  const prompt = `你是针织加工厂进货管理系统的语音解析助手。用户用自然语言描述了操作，请解析为结构化数据。
+
+可能的操作类型(intent)：
+- "delivery": 进货记录 → vendor(厂家), itemNo(款号), color(颜色), unitPrice(单价), quantity(数量)
+- "payment": 收款记录 → vendor(厂家), amount(金额), method(方式:微信/支付宝/银行转账/现金)
+- "sample": 打版 → vendor(厂家), itemNo(款号), color(颜色), status(状态:打版中/已完成/已确认)
+
+如果没法明确判断意图或缺少关键字段，confidence 设为低于 0.5。
+
+用户原文："${text}"
+
+只返回 JSON，不要任何其他文字：
+{"intent":"delivery","fields":{"vendor":"刘","itemNo":"2","color":"红色","unitPrice":14,"quantity":9},"confidence":0.9}`;
+
+  try {
+    const endpoint = aiConfig.url.replace(/\/+$/, "") + "/chat/completions";
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: aiConfig.model || "deepseek-chat",
+        messages: [
+          { role: "system", content: "你是数据解析助手。只返回 JSON，不要其他文字。" },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0,
+        max_tokens: 500
+      })
+    });
+
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || "";
+    const jsonMatch = reply.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("AI 返回格式异常");
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (parsed.confidence < 0.5) {
+      showVoiceError("不太确定你的意思",
+        "你说的是：<br>" + text + "<br><br>AI 理解：" + JSON.stringify(parsed.fields) + "<br><br>请重新说一次，或者手动录入。");
+      return;
+    }
+
+    voiceParsedAction = parsed;
+    showVoiceResult(parsed);
+
+  } catch (err) {
+    showVoiceError("AI 解析失败", err.message + "<br><br>你说的是：<br>" + text);
+  }
+}
+
+function showVoiceResult(parsed) {
+  setVoiceState("Result");
+  const { intent, fields } = parsed;
+
+  const intentLabels = { delivery: "进货记录", payment: "收款记录", sample: "打版记录" };
+  const fieldLabels = {
+    vendor: "厂家", itemNo: "款号", color: "颜色", unitPrice: "单价",
+    quantity: "数量", amount: "金额", method: "方式", status: "状态"
+  };
+
+  elements.voiceResultTitle.textContent = "识别为：" + (intentLabels[intent] || intent);
+  elements.voiceResultFields.innerHTML = Object.entries(fields).map(([k, v]) =>
+    `<div><strong>${fieldLabels[k] || k}：</strong>${v}</div>`
+  ).join("");
+}
+
+function confirmVoiceAction() {
+  if (!voiceParsedAction) return;
+  const { intent, fields } = voiceParsedAction;
+
+  if (intent === "delivery") {
+    activeView = "deliveries";
+    applyActiveView();
+    fillVoiceDelivery(fields);
+  } else if (intent === "payment") {
+    activeView = "payments";
+    applyActiveView();
+    fillVoicePayment(fields);
+  } else if (intent === "sample") {
+    activeView = "samples";
+    applyActiveView();
+    fillVoiceSample(fields);
+  }
+
+  closeVoiceModal();
+  render();
+}
+
+function fillVoiceDelivery(fields) {
+  resetDeliveryForm();
+  if (fields.vendor) elements.deliveryVendorInput.value = fields.vendor;
+  if (fields.itemNo) elements.itemNoInput.value = fields.itemNo;
+  if (fields.color) elements.colorInput.value = fields.color;
+  if (fields.unitPrice) elements.unitPriceInput.value = fields.unitPrice;
+  if (fields.quantity) elements.quantityInput.value = fields.quantity;
+  elements.deliveryDateInput.value = getToday();
+  if (fields.vendor) elements.saveDeliveryButton.textContent = "语音录入 — 请核对后保存";
+  updateDeliveryFormTotal();
+  elements.deliveryVendorInput.focus();
+}
+
+function fillVoicePayment(fields) {
+  resetPaymentForm();
+  if (fields.vendor) elements.paymentVendorInput.value = fields.vendor;
+  if (fields.amount) elements.paymentAmountInput.value = fields.amount;
+  if (fields.method) elements.paymentMethodInput.value = fields.method;
+  elements.paymentDateInput.value = getToday();
+  if (fields.vendor) elements.savePaymentButton.textContent = "语音录入 — 请核对后保存";
+  elements.paymentVendorInput.focus();
+}
+
+function fillVoiceSample(fields) {
+  resetSampleForm();
+  if (fields.vendor) elements.sampleVendorInput.value = fields.vendor;
+  if (fields.itemNo) elements.sampleItemNoInput.value = fields.itemNo;
+  if (fields.color) elements.sampleColorInput.value = fields.color;
+  if (fields.status) elements.sampleStatusInput.value = fields.status;
+  elements.sampleDateInput.value = getToday();
+  if (fields.vendor) elements.saveSampleButton.textContent = "语音录入 — 请核对后保存";
+  elements.sampleVendorInput.focus();
+}
+
+function showVoiceError(title, detail) {
+  setVoiceState("Error");
+  elements.voiceErrorTitle.textContent = title;
+  elements.voiceErrorDetail.innerHTML = detail;
+}
+
+function setVoiceState(state) {
+  showVoiceState(state);
+}
+
+/* ================================================================
+   End Voice Input v2
+   ================================================================ */
 
 /* ================================================================
    AI Analysis
@@ -1935,6 +2102,78 @@ ${vendorData}
 各款号详情：
 ${itemData}`;
 }
+
+/* ---- AI Chat ---- */
+let aiChatHistory = [];
+
+async function sendAiChat() {
+  const input = elements.aiChatInput;
+  const question = input?.value?.trim();
+  if (!question) return;
+
+  const aiConfig = state.meta.aiConfig || {};
+  const apiKey = elements.aiApiKey?.value?.trim();
+  if (!apiKey || !aiConfig.url) {
+    showAiStatus("error", "请先配置 AI API Key。");
+    return;
+  }
+
+  input.value = "";
+  aiChatHistory.push({ role: "user", content: question });
+  renderAiChat();
+
+  const summary = buildDataSummary();
+  const systemMsg = `你是针织加工厂的数据分析助手。用简洁的中文回答。当前数据：\n${summary}`;
+
+  try {
+    const endpoint = aiConfig.url.replace(/\/+$/, "") + "/chat/completions";
+    const messages = [
+      { role: "system", content: systemMsg },
+      ...aiChatHistory.slice(-10)
+    ];
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: aiConfig.model || "deepseek-chat",
+        messages,
+        temperature: 0.5,
+        max_tokens: 2000
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
+
+    const reply = data.choices?.[0]?.message?.content || "AI 未返回有效内容。";
+    aiChatHistory.push({ role: "assistant", content: reply });
+    renderAiChat();
+  } catch (err) {
+    aiChatHistory.push({ role: "assistant", content: "错误：" + err.message });
+    renderAiChat();
+  }
+}
+
+function renderAiChat() {
+  if (!elements.aiOutput) return;
+  const html = aiChatHistory.length
+    ? aiChatHistory.map((msg) => {
+      const isUser = msg.role === "user";
+      return `<div style="margin-bottom:14px;">
+        <div style="font-weight:800;font-size:11px;color:${isUser ? "var(--accent-strong)" : "var(--muted)"};margin-bottom:4px;">${isUser ? "你" : "AI"}</div>
+        <div style="line-height:1.7;">${markedText(msg.content)}</div>
+      </div>`;
+    }).join("")
+    : `<p class="subtle">配置 API Key 后，可在下方输入问题，AI 会根据当前数据回答。</p>`;
+  elements.aiOutput.innerHTML = html;
+  elements.aiOutput.scrollTop = elements.aiOutput.scrollHeight;
+}
+
+/* ---- End AI Chat ---- */
 
 async function analyzeVendors() {
   const summary = buildDataSummary();
@@ -2266,8 +2505,16 @@ function bindEvents() {
   elements.restoreFromCloudButton?.addEventListener("click", restoreFromCloud);
   elements.cloudRestoreList?.addEventListener("click", handleCloudRestoreClick);
 
-  // Voice input
-  elements.globalVoiceButton?.addEventListener("click", startVoiceListening);
+  // Voice input v2
+  elements.voiceFab?.addEventListener("click", openVoiceModal);
+  elements.voiceStartBtn?.addEventListener("click", startVoiceRecording);
+  elements.voiceStopBtn?.addEventListener("click", stopVoiceRecording);
+  elements.voiceConfirmBtn?.addEventListener("click", confirmVoiceAction);
+  elements.voiceRetryBtn?.addEventListener("click", () => { voiceParsedAction = null; showVoiceIdle(); });
+  elements.voiceRetryBtn2?.addEventListener("click", () => { voiceParsedAction = null; showVoiceIdle(); });
+  elements.voiceCancelBtn?.addEventListener("click", closeVoiceModal);
+  elements.voiceCancelBtn2?.addEventListener("click", closeVoiceModal);
+  elements.voiceOverlay?.addEventListener("click", (e) => { if (e.target === elements.voiceOverlay) closeVoiceModal(); });
   initVoiceRecognition();
 
   // AI analysis
@@ -2275,6 +2522,8 @@ function bindEvents() {
   elements.saveAiConfigButton?.addEventListener("click", saveAiConfig);
   elements.aiAnalyzeVendorsButton?.addEventListener("click", analyzeVendors);
   elements.aiAnalyzeItemsButton?.addEventListener("click", analyzeItems);
+  elements.aiChatInput?.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAiChat(); } });
+  elements.aiChatSendBtn?.addEventListener("click", sendAiChat);
 }
 
 bindEvents();
