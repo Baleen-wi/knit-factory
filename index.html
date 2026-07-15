@@ -47,7 +47,6 @@
             <p class="lead">记录每日到货，按厂家、款号、颜色和时间段自动统计货款，并跟踪收款和未付余额。</p>
           </div>
           <div class="topbar-actions">
-            <button class="button button-secondary voice-button" id="globalVoiceButton" type="button" title="语音录入 — 先点输入框，再点这里说话">🎤 语音录入</button>
             <button class="button button-secondary" id="exportJsonButton" type="button">备份 JSON</button>
             <button class="button button-secondary" id="exportDeliveryCsvButton" type="button">导出进货 CSV</button>
             <label class="button button-primary file-button">
@@ -658,15 +657,67 @@
                   <button class="button button-secondary" id="aiAnalyzeItemsButton" type="button">分析款号</button>
                 </div>
               </div>
-              <div class="ai-chat-area" id="aiOutput" style="max-height:520px;overflow-y:auto;padding:16px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-2);min-height:280px;line-height:1.7;font-size:14px;">
-                <p class="subtle">配置 API Key 后，点击上方按钮即可获取 AI 分析结果。</p>
-                <p class="subtle" style="margin-top:8px;">分析内容包括：厂家价格趋势、款号价格波动、未付余额风险、打版转化率等。</p>
+              <div class="ai-chat-area" id="aiOutput" style="max-height:420px;overflow-y:auto;padding:16px;border:1px solid var(--line);border-radius:var(--radius-md) var(--radius-md) 0 0;background:var(--surface-2);min-height:240px;line-height:1.7;font-size:14px;">
+                <p class="subtle">配置 API Key 后，可在下方输入问题，AI 会根据当前数据回答。</p>
+                <p class="subtle" style="margin-top:8px;">也可以点上方"分析厂家""分析款号"按钮快速分析。</p>
+              </div>
+              <div style="display:flex;gap:8px;border:1px solid var(--line);border-top:0;border-radius:0 0 var(--radius-md) var(--radius-md);overflow:hidden;">
+                <input id="aiChatInput" placeholder="问 AI 任何数据相关的问题…" style="border:0;border-radius:0;flex:1;" />
+                <button class="button button-primary" id="aiChatSendBtn" type="button" style="border-radius:0;min-width:60px;">发送</button>
               </div>
               <div class="ai-status" id="aiStatus" style="display:none;margin-top:8px;font-size:13px;color:var(--muted);"></div>
             </article>
           </section>
         </section>
       </main>
+    </div>
+
+    <!-- 语音录入浮动按钮 -->
+    <button class="voice-fab" id="voiceFab" type="button" title="语音录入">
+      <span class="voice-fab-icon">🎤</span>
+    </button>
+
+    <!-- 语音录入弹窗 -->
+    <div class="voice-overlay" id="voiceOverlay">
+      <div class="voice-modal">
+        <div class="voice-modal-state" id="voiceStateIdle">
+          <div class="voice-pulse-ring"></div>
+          <div class="voice-mic-icon">🎤</div>
+          <p class="voice-title">点击开始说话</p>
+          <p class="voice-hint">例如：今天刘老板叫我打了2号红色9件，单价14块</p>
+          <p class="voice-hint">例如：龙老板今天微信结了400块</p>
+          <button class="button button-primary" id="voiceStartBtn" type="button">开始录音</button>
+          <button class="button button-ghost" id="voiceCancelBtn" type="button">取消</button>
+        </div>
+        <div class="voice-modal-state" id="voiceStateListening" style="display:none;">
+          <div class="voice-pulse-ring active"></div>
+          <div class="voice-mic-icon active">🎤</div>
+          <p class="voice-title">正在听...</p>
+          <p class="voice-hint" id="voiceInterimText"></p>
+          <button class="button button-danger" id="voiceStopBtn" type="button">说完啦</button>
+        </div>
+        <div class="voice-modal-state" id="voiceStateProcessing" style="display:none;">
+          <div class="voice-spinner"></div>
+          <p class="voice-title">AI 正在理解...</p>
+          <p class="voice-hint" id="voiceRawText"></p>
+        </div>
+        <div class="voice-modal-state" id="voiceStateResult" style="display:none;">
+          <div class="voice-result-icon">✅</div>
+          <p class="voice-title" id="voiceResultTitle"></p>
+          <div class="voice-result-fields" id="voiceResultFields"></div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <button class="button button-primary" id="voiceConfirmBtn" type="button">确认录入</button>
+            <button class="button button-ghost" id="voiceRetryBtn" type="button">重说一次</button>
+          </div>
+        </div>
+        <div class="voice-modal-state" id="voiceStateError" style="display:none;">
+          <div class="voice-result-icon">⚠️</div>
+          <p class="voice-title" id="voiceErrorTitle"></p>
+          <p class="voice-hint" id="voiceErrorDetail"></p>
+          <button class="button button-primary" id="voiceRetryBtn2" type="button">重试</button>
+          <button class="button button-ghost" id="voiceCancelBtn2" type="button">取消</button>
+        </div>
+      </div>
     </div>
 
     <script src="./app.js"></script>
