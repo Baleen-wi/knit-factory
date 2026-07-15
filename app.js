@@ -2194,7 +2194,7 @@ function bindEvents() {
   elements.exportJsonButton.addEventListener("click", exportJson);
   elements.exportAllJsonButton.addEventListener("click", exportJson);
   elements.exportDeliveryCsvButton.addEventListener("click", exportDeliveryCsv);
-  elements.exportPaymentsCsvButton.addEventListener("click", exportPaymentsCsv);
+  elements.exportPaymentsCsvButton?.addEventListener("click", exportPaymentsCsv);
   elements.exportDeliveryCsvButton2?.addEventListener("click", exportDeliveryCsv);
   elements.exportPaymentsCsvButton2?.addEventListener("click", exportPaymentsCsv);
   elements.printVendorStatementButton?.addEventListener("click", printVendorStatement);
