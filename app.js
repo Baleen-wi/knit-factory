@@ -1626,14 +1626,15 @@ function renderCloudStatus() {
 
 let voiceRecognition = null;
 let voiceActiveField = null;
+let voiceFailCount = 0;
 
 function initVoiceRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    // Keep button visible but disable — user can still see it exists
     if (elements.globalVoiceButton) {
       elements.globalVoiceButton.style.opacity = "0.45";
-      elements.globalVoiceButton.title = "语音不可用：请用 Chrome/Edge 浏览器并通过 http://localhost:5173 访问";
+      elements.globalVoiceButton.title = "语音不可用：请使用 Chrome 或 Edge 浏览器";
+      elements.globalVoiceButton.textContent = "🎤 浏览器不支持";
     }
     return;
   }
@@ -1644,6 +1645,7 @@ function initVoiceRecognition() {
   voiceRecognition.maxAlternatives = 1;
 
   voiceRecognition.onresult = (event) => {
+    voiceFailCount = 0;
     const text = event.results[0][0].transcript.trim();
     if (voiceActiveField && document.activeElement === voiceActiveField) {
       voiceActiveField.value = text;
@@ -1654,16 +1656,21 @@ function initVoiceRecognition() {
 
   voiceRecognition.onerror = (event) => {
     stopVoiceListening();
+    voiceFailCount += 1;
     if (event.error === "not-allowed") {
-      alert("麦克风权限被拒绝。请在浏览器地址栏左侧点击锁图标 → 允许麦克风。");
+      alert("🎤 麦克风权限被拒绝。\n\n请在浏览器地址栏左侧点击锁图标 → 将麦克风设为"允许"。");
     } else if (event.error === "network") {
-      alert("语音识别需要网络连接。Chrome 的语音识别通过 Google 服务器完成，请确认网络畅通。");
+      if (voiceFailCount === 1) {
+        alert("🎤 Chrome 语音识别依赖 Google 服务器，在国内可能被屏蔽。\n\n建议试试：\n1. 用 Microsoft Edge 浏览器打开（Edge 用 Azure 服务器，国内可用）\n2. 或开启 VPN 后使用 Chrome");
+      } else {
+        alert("语音识别仍然无法连接，请换用 Edge 浏览器试试。");
+      }
     } else if (event.error === "no-speech") {
-      alert("未检测到语音，请再试一次。");
-    } else if (event.error === "security") {
-      alert("语音识别需要安全环境。请通过 http://localhost:5173 访问，不要直接用 file:// 打开。");
+      alert("🎤 未检测到语音。\n\n请确认麦克风已开启，并靠近麦克风说话。");
+    } else if (event.error === "aborted") {
+      // User aborted — no message needed
     } else {
-      alert("语音识别出错：" + event.error + "。请确认通过 localhost 访问且使用 Chrome/Edge。");
+      alert("语音识别出错：" + event.error);
     }
   };
 
@@ -1674,19 +1681,18 @@ function initVoiceRecognition() {
 
 function startVoiceListening() {
   if (!voiceRecognition) {
-    alert("当前浏览器不支持语音识别。\n\n请确认：\n1. 使用 Chrome 或 Edge 浏览器\n2. 通过 http://localhost:5173 访问（不要直接双击文件）");
+    alert("🎤 当前浏览器不支持语音识别。\n\n请使用 Chrome 或 Edge 浏览器打开本页面。");
     return;
   }
 
-  // Detect file:// protocol
   if (window.location.protocol === "file:") {
-    alert("语音识别在 file:// 协议下不可用。\n\n请在项目目录运行：\n  python -m http.server 5173\n\n然后访问 http://localhost:5173");
+    alert("🎤 语音识别在 file:// 协议下不可用。\n\n请通过网址访问（GitHub Pages 或 localhost）。");
     return;
   }
 
   const active = document.activeElement;
   if (!active || !active.matches("input:not([type=hidden]), textarea")) {
-    alert("请先点击要填入文字的输入框，再点语音按钮。");
+    alert("🎤 请先点击要填入文字的输入框，再点语音按钮。");
     return;
   }
 
@@ -1698,7 +1704,7 @@ function startVoiceListening() {
     voiceRecognition.start();
   } catch (err) {
     stopVoiceListening();
-    alert("语音识别启动失败：" + err.message + "\n\n请确认通过 localhost 访问且使用 Chrome/Edge。");
+    alert("🎤 语音启动失败：" + err.message + "\n\n请换用 Microsoft Edge 浏览器试试。");
   }
 }
 
