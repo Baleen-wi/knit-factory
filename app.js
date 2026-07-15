@@ -1629,8 +1629,10 @@ let voiceActiveField = null;
 let voiceFailCount = 0;
 
 function initVoiceRecognition() {
+  console.log("[Voice] Initializing speech recognition...");
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
+    console.warn("[Voice] SpeechRecognition not available in this browser");
     if (elements.globalVoiceButton) {
       elements.globalVoiceButton.style.opacity = "0.45";
       elements.globalVoiceButton.title = "语音不可用：请使用 Chrome 或 Edge 浏览器";
@@ -1645,6 +1647,7 @@ function initVoiceRecognition() {
   voiceRecognition.maxAlternatives = 1;
 
   voiceRecognition.onresult = (event) => {
+    console.log("[Voice] Result received:", event.results[0][0].transcript);
     voiceFailCount = 0;
     const text = event.results[0][0].transcript.trim();
     if (voiceActiveField && document.activeElement === voiceActiveField) {
@@ -1655,13 +1658,14 @@ function initVoiceRecognition() {
   };
 
   voiceRecognition.onerror = (event) => {
+    console.error("[Voice] Error:", event.error, event.message);
     stopVoiceListening();
     voiceFailCount += 1;
     if (event.error === "not-allowed") {
-      alert("🎤 麦克风权限被拒绝。\n\n请在浏览器地址栏左侧点击锁图标 → 将麦克风设为"允许"。");
+      alert("🎤 麦克风权限被拒绝。\n\n请在浏览器地址栏左侧点击锁图标 → 将麦克风设为\"允许\"。");
     } else if (event.error === "network") {
       if (voiceFailCount === 1) {
-        alert("🎤 Chrome 语音识别依赖 Google 服务器，在国内可能被屏蔽。\n\n建议试试：\n1. 用 Microsoft Edge 浏览器打开（Edge 用 Azure 服务器，国内可用）\n2. 或开启 VPN 后使用 Chrome");
+        alert("🎤 Chrome 语音识别依赖 Google 服务器，在国内可能被屏蔽。\n\n建议：用 Microsoft Edge 浏览器打开（Edge 用 Azure 服务器，国内可用）。");
       } else {
         alert("语音识别仍然无法连接，请换用 Edge 浏览器试试。");
       }
@@ -1675,12 +1679,18 @@ function initVoiceRecognition() {
   };
 
   voiceRecognition.onend = () => {
+    console.log("[Voice] Recognition ended");
     stopVoiceListening();
   };
+
+  console.log("[Voice] SpeechRecognition initialized successfully");
 }
 
 function startVoiceListening() {
+  console.log("[Voice] Button clicked");
+
   if (!voiceRecognition) {
+    console.warn("[Voice] voiceRecognition is null");
     alert("🎤 当前浏览器不支持语音识别。\n\n请使用 Chrome 或 Edge 浏览器打开本页面。");
     return;
   }
@@ -1691,6 +1701,7 @@ function startVoiceListening() {
   }
 
   const active = document.activeElement;
+  console.log("[Voice] Active element:", active?.tagName, active?.type, active?.matches("input:not([type=hidden]), textarea"));
   if (!active || !active.matches("input:not([type=hidden]), textarea")) {
     alert("🎤 请先点击要填入文字的输入框，再点语音按钮。");
     return;
@@ -1699,16 +1710,20 @@ function startVoiceListening() {
   voiceActiveField = active;
   elements.globalVoiceButton.classList.add("is-listening");
   elements.globalVoiceButton.textContent = "🔴 正在听...";
+  console.log("[Voice] Starting recognition...");
 
   try {
     voiceRecognition.start();
+    console.log("[Voice] recognition.start() succeeded");
   } catch (err) {
+    console.error("[Voice] start() threw:", err);
     stopVoiceListening();
     alert("🎤 语音启动失败：" + err.message + "\n\n请换用 Microsoft Edge 浏览器试试。");
   }
 }
 
 function stopVoiceListening() {
+  console.log("[Voice] Stopping");
   voiceActiveField = null;
   if (elements.globalVoiceButton) {
     elements.globalVoiceButton.classList.remove("is-listening");
