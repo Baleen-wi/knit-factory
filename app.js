@@ -815,6 +815,7 @@ function sampleStatusPill(status) {
 }
 
 function resetSampleForm() {
+  if (!elements.sampleForm) return;
   elements.sampleId.value = "";
   elements.sampleForm.reset();
   elements.sampleDateInput.value = getToday();
@@ -1489,8 +1490,49 @@ async function restoreFromCloud() {
   const config = getCloudConfig();
   const token = (elements.cloudToken?.value || "").trim();
 
+  // WebDAV restore
+  if (config.platform === "webdav") {
+    if (!config.webdavUrl || !config.webdavAccount) {
+      showCloudStatus("error", "请先配置坚果云 WebDAV 并测试连接成功。");
+      return;
+    }
+    saveCloudConfig(config);
+    try {
+      const apiBase = getApiBase();
+      const response = await fetch(`${apiBase}/backups/`, {
+        method: "PROPFIND",
+        headers: {
+          "Authorization": "Basic " + btoa(`${config.webdavAccount}:${config.webdavPassword}`),
+          "Depth": "1"
+        }
+      });
+      if (!response.ok) {
+        showCloudStatus("error", `获取备份列表失败（${response.status}）`);
+        return;
+      }
+      const text = await response.text();
+      const matches = [...text.matchAll(/backup-\d{4}-\d{2}-\d{2}\.json/g)];
+      if (!matches.length) {
+        showCloudStatus("info", "坚果云 backups 目录下暂无备份文件。");
+        return;
+      }
+      const files = [...new Set(matches.map((m) => m[0]))].sort().reverse().slice(0, 20);
+      const listItems = files.map((f) => `
+        <button class="button button-secondary cloud-restore-item" type="button" data-url="${apiBase}/backups/${f}" data-name="${f}" style="display:block;width:100%;text-align:left;">
+          ${f}
+        </button>
+      `).join("");
+      elements.cloudRestoreList.innerHTML = `<p style="font-weight:800;margin:0 0 8px;">选择要恢复的备份：</p>${listItems}`;
+      elements.cloudRestoreList.style.display = "block";
+      showCloudStatus("info", `找到 ${files.length} 个备份文件。`);
+    } catch (err) {
+      showCloudStatus("error", `坚果云恢复错误：${err.message}`);
+    }
+    return;
+  }
+
   if (!config.owner || !config.repo || !token) {
-    showCloudStatus("error", "请先配置云备份并测试连接成功。");
+    showCloudStatus("error", "请先配置仓库信息并测试连接成功。");
     return;
   }
 
@@ -1556,20 +1598,28 @@ async function handleCloudRestoreClick(event) {
   if (!confirm(`确定要用 "${fileName}" 覆盖当前所有数据吗？当前数据将被替换。`)) return;
 
   try {
+    const isWebdav = config.platform === "webdav";
     const headers = {};
     if (isGithub) {
       headers["Authorization"] = `token ${token}`;
       headers["Accept"] = "application/vnd.github.v3+json";
+    } else if (isWebdav) {
+      headers["Authorization"] = "Basic " + btoa(`${config.webdavAccount}:${config.webdavPassword}`);
     }
 
-    const fetchUrl = isGithub ? fileUrl : `${fileUrl}?access_token=${encodeURIComponent(token)}`;
+    const fetchUrl = isGithub ? fileUrl : (!isWebdav ? `${fileUrl}?access_token=${encodeURIComponent(token)}` : fileUrl);
     const response = await fetch(fetchUrl, { headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    const fileData = await response.json();
-    const content = fileData.content
-      ? JSON.parse(atob(fileData.content.replace(/\s/g, "")))
-      : await (await fetch(fileData.download_url)).json();
+    let content;
+    if (isWebdav) {
+      content = await response.json();
+    } else {
+      const fileData = await response.json();
+      content = fileData.content
+        ? JSON.parse(atob(fileData.content.replace(/\s/g, "")))
+        : await (await fetch(fileData.download_url)).json();
+    }
 
     const imported = normalizeState(content);
     if (!imported.deliveries.length && !imported.payments.length) {
@@ -2183,24 +2233,24 @@ function bindEvents() {
     render();
   });
 
-  elements.clearFiltersButton.addEventListener("click", clearFilters);
-  elements.markFilteredReconciledButton.addEventListener("click", markFilteredReconciled);
-  elements.clearDeliveryButton.addEventListener("click", clearDeliveries);
-  elements.clearPaymentButton.addEventListener("click", clearPayments);
+  elements.clearFiltersButton?.addEventListener("click", clearFilters);
+  elements.markFilteredReconciledButton?.addEventListener("click", markFilteredReconciled);
+  elements.clearDeliveryButton?.addEventListener("click", clearDeliveries);
+  elements.clearPaymentButton?.addEventListener("click", clearPayments);
   elements.sampleForm?.addEventListener("submit", handleSampleSubmit);
   elements.resetSampleFormButton?.addEventListener("click", resetSampleForm);
   elements.sampleRecordsBody?.addEventListener("click", handleSampleAction);
   elements.clearSamplesButton?.addEventListener("click", clearSamples);
-  elements.exportJsonButton.addEventListener("click", exportJson);
-  elements.exportAllJsonButton.addEventListener("click", exportJson);
-  elements.exportDeliveryCsvButton.addEventListener("click", exportDeliveryCsv);
+  elements.exportJsonButton?.addEventListener("click", exportJson);
+  elements.exportAllJsonButton?.addEventListener("click", exportJson);
+  elements.exportDeliveryCsvButton?.addEventListener("click", exportDeliveryCsv);
   elements.exportPaymentsCsvButton?.addEventListener("click", exportPaymentsCsv);
   elements.exportDeliveryCsvButton2?.addEventListener("click", exportDeliveryCsv);
   elements.exportPaymentsCsvButton2?.addEventListener("click", exportPaymentsCsv);
   elements.printVendorStatementButton?.addEventListener("click", printVendorStatement);
-  elements.importFileInput.addEventListener("change", importFile);
-  elements.resetSampleButton.addEventListener("click", resetSampleData);
-  elements.clearAllDataButton.addEventListener("click", clearAllData);
+  elements.importFileInput?.addEventListener("change", importFile);
+  elements.resetSampleButton?.addEventListener("click", resetSampleData);
+  elements.clearAllDataButton?.addEventListener("click", clearAllData);
 
   // Cloud backup
   elements.cloudPlatform?.addEventListener("change", () => {
