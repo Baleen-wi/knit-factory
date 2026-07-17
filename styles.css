@@ -773,13 +773,14 @@ input[type="checkbox"] {
 }
 
 .voice-modal {
-  background: var(--surface);
+  background: #fff;
   border-radius: 28px;
   padding: 40px 32px;
   max-width: 440px;
   width: calc(100% - 40px);
   text-align: center;
-  box-shadow: 0 24px 64px oklch(0% 0 0 / 0.25);
+  box-shadow: 0 24px 64px oklch(0% 0 0 / 0.35);
+  color: #1a1a1a;
 }
 
 .voice-modal-state {
@@ -793,7 +794,7 @@ input[type="checkbox"] {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: var(--surface-2);
+  background: #f0f0f0;
   display: grid;
   place-items: center;
   transition: background 300ms;
